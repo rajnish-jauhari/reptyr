@@ -67,9 +67,10 @@ operating systems may be technically feasible, but requires
 significant low-level knowledge of the relevant platform, and may
 entail significant refactors.
 
-reptyr works on i386, x86_64, and ARM. Ports to other architectures should be
-straightforward, and should in most cases be as simple as adding an arch/ARCH.h
-file and adding a clause to the ifdef ladder in ptrace.c.
+reptyr works on i386, x86_64, ARM, AArch64, PowerPC, RISC-V 64, and s390x.
+Ports to other architectures should be straightforward, and should in most
+cases be as simple as adding an arch/ARCH.h file and adding a clause to the
+ifdef ladder in ptrace.c.
 
 ptrace_scope on Ubuntu Maverick and up
 --------------------------------------

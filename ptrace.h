@@ -28,6 +28,9 @@
 #ifdef __riscv
 #include <asm/ptrace.h>
 #endif
+#ifdef __s390x__
+#include <asm/ptrace.h>
+#endif
 #include <sys/ptrace.h>
 #include <sys/types.h>
 #include <sys/user.h>
