@@ -212,12 +212,23 @@ int ptrace_save_regs(struct ptrace_child *child) {
     if (ptrace_advance_to_state(child, ptrace_at_syscall) < 0)
         return -1;
 
+#ifdef ARCH_HAVE_PEEKUSER_REGS
+    /* Use PTRACE_PEEKUSER for architectures that don't support PTRACE_GETREGSET */
+    unsigned long *regs_ptr = (unsigned long *)&child->regs;
+    size_t i;
+    for (i = 0; i < sizeof(child->regs) / sizeof(unsigned long); i++) {
+        regs_ptr[i] = ptrace_command(child, PTRACE_PEEKUSER, i * sizeof(unsigned long));
+        if (child->error)
+            return -1;
+    }
+#else
     struct iovec reg_iovec = {
         .iov_base = &child->regs,
         .iov_len = sizeof(child->regs)
     };
     if (ptrace_command(child, PTRACE_GETREGSET, NT_PRSTATUS, &reg_iovec) < 0)
         return -1;
+#endif
     arch_fixup_regs(child);
     if (arch_save_syscall(child) < 0)
         return -1;
@@ -226,6 +237,16 @@ int ptrace_save_regs(struct ptrace_child *child) {
 
 int ptrace_restore_regs(struct ptrace_child *child) {
     int err;
+#ifdef ARCH_HAVE_PEEKUSER_REGS
+    /* Use PTRACE_POKEUSER for architectures that don't support PTRACE_SETREGSET */
+    unsigned long *regs_ptr = (unsigned long *)&child->regs;
+    size_t i;
+    for (i = 0; i < sizeof(child->regs) / sizeof(unsigned long); i++) {
+        err = ptrace_command(child, PTRACE_POKEUSER, i * sizeof(unsigned long), regs_ptr[i]);
+        if (err < 0)
+            return err;
+    }
+#else
     struct iovec reg_iovec = {
         .iov_base = &child->regs,
         .iov_len = sizeof(child->regs)
@@ -233,6 +254,7 @@ int ptrace_restore_regs(struct ptrace_child *child) {
     err = ptrace_command(child, PTRACE_SETREGSET, NT_PRSTATUS, &reg_iovec);
     if (err < 0)
         return err;
+#endif
     return arch_restore_syscall(child);
 }
 
@@ -250,15 +272,26 @@ unsigned long ptrace_remote_syscall(struct ptrace_child *child,
 
     typeof(child->regs) regs;
 
+#define setreg(r, v) (*ptr(&regs, (personality(child)->r))) = (v)
+
+#ifdef ARCH_HAVE_PEEKUSER_REGS
+    /* Use PTRACE_PEEKUSER/PTRACE_POKEUSER for register access */
+    unsigned long *regs_ptr = (unsigned long *)&regs;
+    size_t i;
+    for (i = 0; i < sizeof(regs) / sizeof(unsigned long); i++) {
+        regs_ptr[i] = ptrace_command(child, PTRACE_PEEKUSER, i * sizeof(unsigned long));
+        if (child->error)
+            return -1;
+    }
+#else
     struct iovec reg_iovec = {
         .iov_base = &regs,
         .iov_len = sizeof(regs)
     };
 
-#define setreg(r, v) (*ptr(&regs, (personality(child)->r))) = (v)
-
     if (ptrace_command(child, PTRACE_GETREGSET, NT_PRSTATUS, &reg_iovec) < 0)
         return -1;
+#endif
 
     setreg(syscall_arg0, p0);
     setreg(syscall_arg1, p1);
@@ -267,21 +300,43 @@ unsigned long ptrace_remote_syscall(struct ptrace_child *child,
     setreg(syscall_arg4, p4);
     setreg(syscall_arg5, p5);
 
+#ifdef ARCH_HAVE_PEEKUSER_REGS
+    for (i = 0; i < sizeof(regs) / sizeof(unsigned long); i++) {
+        if (ptrace_command(child, PTRACE_POKEUSER, i * sizeof(unsigned long), regs_ptr[i]) < 0)
+            return -1;
+    }
+#else
     if (ptrace_command(child, PTRACE_SETREGSET, NT_PRSTATUS, &reg_iovec) < 0)
         return -1;
+#endif
 
     if (ptrace_advance_to_state(child, ptrace_after_syscall) < 0)
         return -1;
 
+#ifdef ARCH_HAVE_PEEKUSER_REGS
+    for (i = 0; i < sizeof(regs) / sizeof(unsigned long); i++) {
+        regs_ptr[i] = ptrace_command(child, PTRACE_PEEKUSER, i * sizeof(unsigned long));
+        if (child->error)
+            return -1;
+    }
+#else
     if (ptrace_command(child, PTRACE_GETREGSET, NT_PRSTATUS, &reg_iovec) < 0)
         return -1;
+#endif
 
     rv = *ptr(&regs, (personality(child)->syscall_rv));
 
     setreg(reg_ip, *(unsigned long*)((void*)&child->regs + personality(child)->reg_ip));
 
+#ifdef ARCH_HAVE_PEEKUSER_REGS
+    for (i = 0; i < sizeof(regs) / sizeof(unsigned long); i++) {
+        if (ptrace_command(child, PTRACE_POKEUSER, i * sizeof(unsigned long), regs_ptr[i]) < 0)
+            return -1;
+    }
+#else
     if (ptrace_command(child, PTRACE_SETREGSET, NT_PRSTATUS, &reg_iovec) < 0)
         return -1;
+#endif
 
 #undef setreg
 

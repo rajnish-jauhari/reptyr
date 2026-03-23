@@ -22,14 +22,19 @@
 
 /*
  * s390x architecture support
- * 
+ *
  * Register layout for s390x:
  * - r0-r15: General purpose registers
  * - r2: syscall return value and first argument
  * - r2-r7: syscall arguments (arg0-arg5)
  * - r1: syscall number
  * - psw.addr: Program Status Word address (instruction pointer)
+ *
+ * Note: s390x uses PTRACE_PEEKUSER/PTRACE_POKEUSER for register access
+ * instead of PTRACE_GETREGSET/PTRACE_SETREGSET
  */
+
+#define ARCH_HAVE_PEEKUSER_REGS
 
 static struct ptrace_personality arch_personality[1] = {
     {
@@ -64,5 +69,3 @@ static inline int arch_save_syscall(struct ptrace_child *child) {
 static inline int arch_restore_syscall(struct ptrace_child *child) {
     return arch_set_syscall(child, child->saved_syscall);
 }
-
-// Made with Bob
